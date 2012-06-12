@@ -63,10 +63,13 @@ print "go for it (press ? for help, q to quit)"
 states = {}
 specids = deque()
 
+# start at zero redshift
+z = 0
+
 while (1):
 
     py.clf()
-    py.plot(xspec,yspec)
+    py.plot(xspec/(1.0+z), yspec)
 
     # make sure that things are set ok for active region
     try:
@@ -206,6 +209,17 @@ while (1):
                                                         states[id]['tau'][i]))
 
 
+    if (docmd == 'z'):
+        print("old redshift: %8.6f" % z)
+
+        zinput = raw_input("new redshift: ")
+        try:
+            newz = float(zinput)
+        except:
+            newz = z
+        finally:
+            z = newz
+
     if (docmd == '?'):
         print("n #1 #2 = add element #1 with ionization state #2")
         print("c (#) = cycle the active species")
@@ -219,6 +233,8 @@ while (1):
         print("d = increase velocity (blueshift)")
         print("f = decrease velocity (redshift)")
         print("v = reset the velocity by hand")
+
+        print("z = input cosomological redshift")
 
         print("q = quit")
         
