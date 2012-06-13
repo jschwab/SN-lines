@@ -113,8 +113,24 @@ while (1):
     if (docmd == 'q'): break;
 
     if (docmd == 'n'):
-        e, i = doargs.split(' ')
-        newid = (int(e),int(i))
+        try:
+            e, i = doargs.split(' ')
+        except:
+            e = 0
+            i = 0
+
+        if e in elements and i in romannums:
+            e = elements.index(e) + 1
+            i = romannums.index(i)
+        else:
+            try:
+                e = int(e)
+                i = int(i)                
+            except ValueError:
+                e = 0
+                i = 0
+
+        newid = (e,i)
         if newid in linedict:
             specids.append(newid)
 
