@@ -86,12 +86,18 @@ class SNConsole(cmd.Cmd):
         return self.state.remove_species()
 
     def do_load(self,args):
-        """Load a new data file"""
+        """Load and plot new data file
+
+        SN> load <filename>
+        """
         filename = args
         return self.state.read_data(filename)
 
     def do_oload(self,args):
-        """Overload a new data file"""
+        """Load and overplot a new data file
+
+        SN> oload <filename>
+        """
         filename = args
         return self.state.read_data(filename, append = True)
 
@@ -101,31 +107,46 @@ class SNConsole(cmd.Cmd):
         return self.state.remove_data()
 
     def do_incv(self,args):
-        """Decrement velocity of active species by (# = 1e3) km/s"""
+        """Increase velocity of active speciess
+
+        SN> incv [<deltav> = 1e3]
+        """
         active = self.state.get_active_species()
         dv = self._try_float(args, default = 1e3)
         active.v += dv
 
     def do_decv(self,args):
-        """Decrement velocity of active species by (# = 1e3) km/s"""
+        """Decrease velocity of active speciess
+
+        SN> decv [<deltav> = 1e3]
+        """
         active = self.state.get_active_species()
         dv = self._try_float(args, default = 1e3)
         active.v -= dv
 
     def do_setv(self,args):
-        """Set velocity of active species to (# = 1e4) km/s"""
+        """Set velocity of active speciess
+
+        SN> setv [<v> = 1e4]
+        """
         active = self.state.get_active_species()
         v = self._try_float(args, default = 1e4)
         active.v = v
 
     def do_more(self,args):
-        """Show (# = 1) more lines"""
+        """Show more lines of active species
+
+        SN> more [<deltan> = 1]
+        """
         active = self.state.get_active_species()
         dn = self._try_int(args)
         active.n += dn
 
     def do_less(self,args):
-        """Show (# = 1) fewer lines"""
+        """Show more lines of active species
+
+        SN> less [<deltan> = 1]
+        """
         active = self.state.get_active_species()
         dn = self._try_int(args)
         active.n -= dn
@@ -308,6 +329,8 @@ class SNLinesState:
         self._z = 0 
         self.xdata = []
         self.ydata = []
+        self.xrange = [3000, 9000]
+        self.yrange = [0,1]
 
     @property
     def z(self):
@@ -441,7 +464,8 @@ if __name__ == "__main__":
     (opts, args) = parser.parse_args()
 
     state = SNLinesState()
-    state.read_data(args[0])
+    for arg in args:
+        state.read_data(arg, append = True)
 
     # override defaults with values from command line
     if opts.xrange is not None:
