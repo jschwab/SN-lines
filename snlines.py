@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+import os
+import cmd
+import readline
 import optparse
 import numpy as np
 import pylab as py
@@ -7,114 +10,54 @@ from collections import deque
 
 #########################################################
 # Code for spectral line identification
-# overplots a spectrum 
+# Thanks to the Bloodhound Gang
 #########################################################
 
-# some useful naming data
 romannums = ('I','II','III', 'IV')
 elements = ('H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne', 'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'Ar', 'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni','Cu', 'Zn', 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr', 'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd', 'In', 'Sn', 'Sb', 'I', 'Te', 'Xe', 'Cs', 'Ba', 'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu', 'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn', 'Fr', 'Ra', 'Ac', 'Th', 'Pa', 'U')
 
-py.ion()
-pklfile = "kurucz.pkl"
+def species_name(specid):
+    return "{} {}".format(elements[specid[0]-1], romannums[specid[1]])
 
-# get command line arguments
-parser = optparse.OptionParser()
-parser.add_option("-v", dest="vel", type="float", default=1e4)
-parser.add_option("-t", dest="temp", type="float", default=1e4)
-parser.add_option("--xr",dest="xrange")
-parser.add_option("--yr",dest="yrange")
+### Define SNConsole ###
 
-# set defaults, if not specified
-(opts, args) = parser.parse_args()
+class SNConsole(cmd.Cmd):
 
-# check for spectrum file
-if (len(args)  == 0):
-    print "You need to specify a spectrum file on the command line"
-    exit()
+    def __init__(self, state = None):
+        cmd.Cmd.__init__(self)
+        self.prompt = "SN> "
+        self.intro = "Welcome to SNLines"
 
-# read input spectrum
-xspec, yspec  = np.loadtxt(args[0], unpack = True)
-yrange = (0,1.1*max(yspec))
-xrange = (min(xspec),max(xspec))
-
-# override the data ranges if set from command line
-if opts.xrange is not None:
-   xx = opts.xrange.split(',')
-   x1 = float(xx[0])
-   x2 = float(xx[1])
-   xrange = [x1,x2]
-
-if opts.yrange is not None:
-   yy = opts.yrange.split(',')
-   y1 = float(yy[0])
-   y2 = float(yy[1])
-   yrange = [y1,y2]
-
-# read in line data, pickled by pickedata.py
-with open(pklfile, 'rb') as f:
-    linedict = pickle.load(f)
-
-# plot it up
-print "Using temperature " + str(opts.temp) + " K",
-print " and velocity " + str(opts.vel) + " cm/s"
-print "go for it (press ? for help, q to quit)"
-
-# we start with no species
-states = {}
-specids = deque()
-
-# start at zero redshift
-z = 0
-
-while (1):
-
-    py.clf()
-    py.plot(xspec/(1.0+z), yspec)
-
-    # make sure that things are set ok for active region
-    try:
-        active = specids[-1]
-    except IndexError:
-        active = None
-
-    # overplot lines
-    for id in specids:
-
-        if id == active:
-            color = 'red'
+        # start with a state, or if not, create a blank one
+        if state is None:
+            self.state = SNLinesState()
         else:
-            color = 'black'
+            self.state = state
 
-        state = states[id]
-
-        for lam in state['lam'][:state['nshow']]:
-            lam_obs = lam*(1 - state['vel']/3e5)
-            x = [lam_obs,lam_obs]
-            
-            py.plot(x,yrange,color=color)
-
-    py.xlabel('wavelength')
-    py.ylabel('flux')
-    if active is not None:
-        py.title(states[active]['name'] + '; vel = ' + str(states[active]['vel']) + ' km/s')
-             
-    py.ylim(yrange)
-    py.xlim(xrange)
-    py.show()
-
-    # get next command and break into command and args
-    do = raw_input(">")
-    try:
-        docmd,doargs = do.split(' ', 1)
-    except ValueError:
-        docmd = do
-        doargs = None
-
-    if (docmd == 'q'): break;
-
-    if (docmd == 'n'):
+    ## Internal functions to aid with argument conversions ##
+    def _try_int(self,args, default = 1):
         try:
-            e, i = doargs.split(' ')
+            value = int(args)
+        except (TypeError, ValueError):
+            value = default
+        return value
+
+    def _try_float(self,args, default = 0):
+        try:
+            value = float(args)
+        except (TypeError, ValueError):
+            value = default
+        return value
+
+    ## Command definitions ##
+    def do_exit(self, args):
+        """Exit SNLines"""
+        return -1
+
+    def do_new(self,args):
+        """Add a new species"""
+        try:
+            e, i = args.split(' ')
         except:
             e = 0
             i = 0
@@ -130,133 +73,391 @@ while (1):
                 e = 0
                 i = 0
 
-        newid = (e,i)
-        if newid in linedict:
-            specids.append(newid)
+        specid = (e,i)
+        return self.state.add_species(specid)
 
-            # start with one line showing 
-            # and put it at the velocity of the previous active line
-            if active is None:
-                newvel = opts.vel
-            else:
-                newvel = states[active]['vel']
+    def do_cycle(self, args):
+        """Cycle through the species by (#); default is 1"""
+        n = self._try_int(args)
+        return self.state.cycle_species(n)
+
+    def do_kill(self,args):
+        """Remove the active species"""
+        return self.state.remove_species()
+
+    def do_load(self,args):
+        """Load a new data file"""
+        filename = args
+        return self.state.read_data(filename)
+
+    def do_oload(self,args):
+        """Overload a new data file"""
+        filename = args
+        return self.state.read_data(filename, append = True)
+
+    def do_uload(self,args):
+        """Unload the most recent data file"""
+        filename = args
+        return self.state.remove_data()
+
+    def do_incv(self,args):
+        """Decrement velocity of active species by (# = 1e3) km/s"""
+        active = self.state.get_active_species()
+        dv = self._try_float(args, default = 1e3)
+        active.v += dv
+
+    def do_decv(self,args):
+        """Decrement velocity of active species by (# = 1e3) km/s"""
+        active = self.state.get_active_species()
+        dv = self._try_float(args, default = 1e3)
+        active.v -= dv
+
+    def do_setv(self,args):
+        """Set velocity of active species to (# = 1e4) km/s"""
+        active = self.state.get_active_species()
+        v = self._try_float(args, default = 1e4)
+        active.v = v
+
+    def do_more(self,args):
+        """Show (# = 1) more lines"""
+        active = self.state.get_active_species()
+        dn = self._try_int(args)
+        active.n += dn
+
+    def do_less(self,args):
+        """Show (# = 1) fewer lines"""
+        active = self.state.get_active_species()
+        dn = self._try_int(args)
+        active.n -= dn
+
+    def do_setn(self,args):
+        """Show (# = 1) lines"""
+        active = self.state.get_active_species()
+        n = self._try_int(args)
+        active.n = n
+
+    def do_setz(self,args):
+        """Set the cosmological redshift to be (# = 0)"""
+        z = self._try_float(args,default = 0)
+        self.state. z = z
+
+    def do_lines(self,args):
+        """List displayed lines"""
+        return self.state.describe_lines()
+
+    def do_species(self,args):
+        """List displayed species"""
+        return self.state.describe_species()
 
 
-            name = " ".join((elements[newid[0]-1], 
-                             romannums[newid[1]]))
+    ## Command aliases ##
 
+    def do_n(self, args):
+        """alias for new"""
+        return self.do_new(args)
+
+    def do_c(self, args):
+        """alias for cycle"""
+        return self.do_cycle(args)
+
+    def do_k(self, args):
+        """alias for kill"""
+        return self.do_kill(args)
+
+    def do_e(self, args):
+        """alias for species"""
+        return self.do_species(args)
+
+    def do_f(self,args):
+        """alias for decv"""
+        return self.do_decv(args)
+
+    def do_d(self,args):
+        """alias for incv"""
+        return self.do_incv(args)
+
+    def do_v(self,args):
+        """alias for setv"""
+        return self.do_setv(args)
+
+    def do_a(self,args):
+        """alias for more"""
+        return self.do_more(args)
+
+    def do_r(self,args):
+        """alias for incv"""
+        return self.do_less(args)
+
+    def do_l(self,args):
+        """alias for lines"""
+        return self.do_lines(args)
+
+    def do_z(self,args):
+        """alias for setz"""
+        return self.do_setz(args)
+
+    def do_q(self,args):
+        """alias for exit"""
+        return self.do_exit(args)
+
+    def do_quit(self,args):
+        """alias for exit"""
+        return self.do_exit(args)
+
+    ## Override cmd Commands ##
+    def do_shell(self, args):
+        """Pass command to a system shell when line begins with '!'"""
+        os.system(args)
+
+    def do_help(self, args):
+        """Get help on commands
+           'help <command>' or '? <command>' gives help on <command>
+        """
+        if args == "":
+        # for no argument, list our commands
+
+            print("for more detailed help, use ? <command>")
+            print("")
+
+            print("n, new      add species")
+            print("c, cycle    cycle the active species")
+            print("k, kill     remove active species")
+            print("e, species  list all species")
+
+            print("")
+
+            print("d, incv     increase velocity (blueshift)")
+            print("f, decv     decrease velocity (redshift)")
+            print("v, setv     set the velocity")
+
+            print("")
+
+            print("a, more     add line(s) to active species")
+            print("r, less     remove line(s) from active species")
+            print("l, lines    list all current lines")
             
-            # here are lines we even want to consider
+            print("")
 
-            lam = linedict[newid]['lam']
-            tau = linedict[newid]['tau']
-            gf = linedict[newid]['gf']
-            El = linedict[newid]['El']
+            print("-, load     load & plot a datafile")
+            print("-, oload    load & overplot a datafile")
+            print("-, uload    unload the most recently loaded datafile")
+            
+            print("")
 
-            lamslice = (lam > xrange[0]) & (lam < xrange[1])
+            print("z, setz     set cosomological redshift")
+            print("q, quit     exit SNLines")
 
-            # shift from reference temperature to temp
-            k_B = 8.61733e-5
-            tref = 1e4
-            El = El * np.exp(El/k_B/tref) * np.exp(-El/k_B/opts.temp)
-
-            # pack this all in a dictionary
-            states[newid] = {'vel': newvel, 
-                             'nshow': 1,
-                             'name': name,
-                             'lam': lam[lamslice], 
-                             'tau': tau[lamslice], 
-                             'gf': gf[lamslice], 
-                             'El' : El[lamslice]}
         else:
-            print("No such line found in {}".format(pklfile))
+        # use built-in method to fetch the doc string
+            cmd.Cmd.do_help(self, args)
 
 
-    if (docmd == 'c'):
-        try:
-            nr = int(doargs)
-        except (TypeError, ValueError):
-            nr = 1
-        specids.rotate(nr)
+    def postcmd(self, stop, line):
+        """After command has been processed, update the screen"""
+        self.state.show()
+        return stop
 
-    if (docmd == 'k') and len(specids) >= 1:
-        specids.pop()
-                       
-    if (docmd == 'd') and (active is not None): 
-        states[active]['vel'] += 1e3
-        print('velocity = ' + str(states[active]['vel']) + ' km/s')
-    if (docmd == 'f') and (active is not None): 
-        states[active]['vel'] -= 1e3
-        print('velocity = ' + str(states[active]['vel']) + ' km/s')
-    if (docmd == 'v') and (active is not None):
-        states[active]['vel'] = float(input("new velocity (in km/s): "))
+
+class Species(object):
+
+    def __init__(self, name = "active", velocity = 1e4, nshow = 1):
+
+        self._name = name
+        self._v = velocity
+        self._nshow = nshow
+
+    @property
+    def name(self):
+        """Species name"""
+        return self._name
+
+    @property
+    def v(self):
+        """Species velocity"""
+        return self._v
+
+    @v.setter
+    def v(self, value):
+        self._v = value
+
+    @property
+    def n(self):
+        """Species number of lines"""
+        return self._nshow
+
+    @n.setter
+    def n(self, value):
+        self._nshow = value
         
-    if (docmd == 'a') and (active is not None): 
-
-        try:
-            nl = int(doargs)
-        except (TypeError, ValueError):
-            nl = 1
-
-        states[active]['nshow'] = min(states[active]['nshow']+nl,
-                                      len(states[active]['lam']))
-
-    if (docmd == 'r') and (active is not None):
-
-        try:
-            nl = int(doargs)
-        except (TypeError, ValueError):
-            nl = 1
-
-        states[active]['nshow'] = max(1,states[active]['nshow']-nl)
-
-    if (docmd == 'e'):
-        for id in specids:
-            print("%4s %10.3e" % (states[id]['name'], states[id]['vel']))
-
-    if (docmd == 'l'):
-        print "   lambda        gf       E_low      tau"
-        for id in specids:
-            print("%4s @ vel = %10.3e km/s" % (states[id]['name'], states[id]['vel']))
-            for i in range(states[id]['nshow']):
-                print(" %10.3e %10.3e %10.3e %10.3e" % (states[id]['lam'][i],
-                                                        states[id]['gf'][i],
-                                                        states[id]['El'][i],
-                                                        states[id]['tau'][i]))
+    def describe(self):
+        return "{} ; vel = {} km/s".format(self._name, self._v)
 
 
-    if (docmd == 'z'):
-        print("old redshift: %8.6f" % z)
-
-        zinput = raw_input("new redshift: ")
-        try:
-            newz = float(zinput)
-        except:
-            newz = z
-        finally:
-            z = newz
-
-    if (docmd == '?'):
-        print("n #1 #2 = add element #1 with ionization state #2")
-        print("c (#) = cycle the active species")
-        print("k = remove active species")
-        print("e = list all species")
-
-        print("a (#) = add line(s) to active species")
-        print("r (#) = remove line(s) from active species")
-        print("l = list all current lines")
-
-        print("d = increase velocity (blueshift)")
-        print("f = decrease velocity (redshift)")
-        print("v = reset the velocity by hand")
-
-        print("z = input cosomological redshift")
-
-        print("q = quit")
         
+class SNLinesState:
+
+    def __init__(self, pklfile = "kurucz.pkl"):
+        
+        # read in line data, pickled by pickedata.py
+        with open(pklfile, 'rb') as f:
+            self.linedict = pickle.load(f)
+
+        # empty state
+        self.species = {}
+        self.specids = deque()
+        self._z = 0 
+        self.xdata = []
+        self.ydata = []
+
+    @property
+    def z(self):
+        """Cosmological redshift"""
+        return self._z
+
+    @z.setter
+    def z(self, value):
+        self._z = value
+
+    def get_active_species(self):
+        return self.species[self.specids[-1]]
+
+    def read_data(self, filename, append = False, rescale = True):
+        """read in the data file"""
+        try:
+            newxdata, newydata  = np.loadtxt(filename, unpack = True)
+        except IOError:
+            print("*** Unable to read file: {}".format(filename))
+        else:
+            if rescale:
+                self.yrange = (0,1.1*max(newydata))
+                self.xrange = (min(newxdata),max(newxdata))
+            if append:
+                self.xdata.append(newxdata)
+                self.ydata.append(newydata)
+            else:
+                self.xdata = [newxdata]
+                self.ydata = [newydata]
+
+    def remove_data(self):
+        if len(self.xdata) > 0:
+            self.xdata.pop()
+            self.ydata.pop()
+
+    def add_species(self, specid):
+        """add a species"""
+        if specid in self.specids:
+            print("Species already exists")
+            return
+
+        if specid in self.linedict:
+            self.specids.append(specid)
+            self.species[specid] = Species(name = species_name(specid))
+        else:
+            print("Species not in datafile")
+
+    def remove_species(self):
+        """take species out of states and specids"""
+        if len(self.specids) > 0:
+            self.species.pop(self.specids.pop())
+        
+    def cycle_species(self, n):
+        """shift the species deque"""
+        self.specids.rotate(n)
+
+    def describe_species(self):
+        """print which species we're using"""
+        for id in self.specids:
+            print(self.species[id].describe())
+
+    def describe_lines(self):
+        """print which lines we're displaying"""
+        for id in self.specids:
+            s = self.species[id]
+            ld = self.linedict[id]
+            print(s.describe())
+            print("   lambda        gf       E_low      tau")
+
+            # lam_obs = ld['lam'] * (1 - s.v/3e5)
+            # visible = (lam_obs > self.xrange[0]) & (lam_obs < self.xrange[1])
+            # nshow = max(s.n, len(visible))
+            
+            nshow = min(s.n, len(ld['lam']))
+            for i in range(nshow):                
+                print(" %10.3e %10.3e %10.3e %10.3e" % (ld['lam'][i],
+                                                        ld['gf'][i],
+                                                        ld['El'][i],
+                                                        ld['tau'][i]))
 
 
+    def show(self):
+        """Plots the spectral data and overlays the lines"""
+        py.clf()
+        
+        for xpts,ypts in zip(self.xdata,self.ydata):
+            py.plot(xpts /(1+self.z), ypts)
+
+        py.xlabel('wavelength')
+        py.ylabel('flux')
+
+        py.ylim(self.yrange)
+        py.xlim(self.xrange)
+
+        # make sure that things are set ok for active region
+        try:
+            active = self.specids[-1]
+        except IndexError:
+            active = None
+
+        # overplot lines
+        for id in self.specids:
+
+            ld = self.linedict[id]
+            s = self.species[id]
+
+            if id == active:
+                color = 'red'
+                py.title(s.describe())
+            else:
+                color = 'black'
+
+            lam_obs = ld['lam'] * (1 - s.v/3e5)
+            # visible = (lam_obs > self.xrange[0]) & (lam_obs < self.xrange[1])
+
+            nshow = min(s.n, len(lam_obs))
+            for lam in lam_obs[:nshow]:
+                py.axvline(lam, color=color)
+
+        py.show()
 
 
+if __name__ == "__main__":
+    
+    # get command line arguments
+    parser = optparse.OptionParser()
+    parser.add_option("--xr",dest="xrange")
+    parser.add_option("--yr",dest="yrange")
 
+    # set defaults, if not specified
+    (opts, args) = parser.parse_args()
 
+    state = SNLinesState()
+    state.read_data(args[0])
+
+    # override defaults with values from command line
+    if opts.xrange is not None:
+        xx = opts.xrange.split(',')
+        state.xrange = [float(x) for x in xx]
+
+    if opts.yrange is not None:
+        yy = opts.yrange.split(',')
+        state.yrange = [float(y) for y in yy]
+
+    # turn interactive mode on & show first plot
+    py.ion()
+    state.show()
+
+    # get a console object and enter the main loop
+    console = SNConsole(state)
+    console.cmdloop() 
+
+    print("Exiting...")
