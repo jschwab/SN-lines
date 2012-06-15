@@ -359,7 +359,7 @@ class Species(object):
         
 class SNLinesState:
 
-    def __init__(self, pklfile = "kurucz.pkl"):
+    def __init__(self, pklfile = "kurucz.pkl", defaultv = 1e4):
         
         # read in line data, pickled by pickedata.py
         with open(pklfile, 'rb') as f:
@@ -373,6 +373,7 @@ class SNLinesState:
         self.ydata = []
         self.xrange = [3000, 9000]
         self.yrange = [0,1]
+        self.defaultv = defaultv
 
     @property
     def z(self):
@@ -418,8 +419,16 @@ class SNLinesState:
             return
 
         if specid in self.linedict:
+            
+            active = self.get_active_species()
+            if active is not None:
+                v = active.v
+            else:
+                v = self.defaultv
+            
+            self.species[specid] = Species(name = species_name(specid),
+                                           velocity = v)
             self.specids.append(specid)
-            self.species[specid] = Species(name = species_name(specid))
         else:
             print("Species not in datafile")
 
@@ -504,11 +513,12 @@ if __name__ == "__main__":
     parser = optparse.OptionParser()
     parser.add_option("--xr",dest="xrange")
     parser.add_option("--yr",dest="yrange")
+    parser.add_option("-v", dest="vel", type="float", default=1e4)
 
     # set defaults, if not specified
     (opts, args) = parser.parse_args()
 
-    state = SNLinesState()
+    state = SNLinesState(defaultv = opts.vel)
     for arg in args:
         state.read_data(arg, append = True)
 
