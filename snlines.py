@@ -51,11 +51,22 @@ class SNConsole(cmd.Cmd):
 
     ## Command definitions ##
     def do_exit(self, args):
-        """Exit SNLines"""
+        """Exit SNLines
+        
+        SN> exit
+        """
         return -1
 
     def do_new(self,args):
-        """Add a new species"""
+        """Add a new species 
+
+        SN> new <element> <ionstate>
+
+        Either as 
+        SN> new Ca II
+        or 
+        SN> new 20 1
+        """
         try:
             e, i = args.split(' ')
         except:
@@ -77,16 +88,22 @@ class SNConsole(cmd.Cmd):
         return self.state.add_species(specid)
 
     def do_cycle(self, args):
-        """Cycle through the species by (#); default is 1"""
+        """Cycle through the species
+
+        SN> cycle [<n> = 1]
+        """
         n = self._try_int(args)
         return self.state.cycle_species(n)
 
     def do_kill(self,args):
-        """Remove the active species"""
+        """Remove the active species
+
+        SN> kill
+        """
         return self.state.remove_species()
 
     def do_load(self,args):
-        """Load and plot new data file
+        """Load and plot a new data file
 
         SN> load <filename>
         """
@@ -102,7 +119,10 @@ class SNConsole(cmd.Cmd):
         return self.state.read_data(filename, append = True)
 
     def do_uload(self,args):
-        """Unload the most recent data file"""
+        """Unload the most recent data file
+        
+        SN> uload
+        """
         filename = args
         return self.state.remove_data()
 
@@ -112,62 +132,77 @@ class SNConsole(cmd.Cmd):
         SN> incv [<deltav> = 1e3]
         """
         active = self.state.get_active_species()
-        dv = self._try_float(args, default = 1e3)
-        active.v += dv
+        if active is not None:
+            dv = self._try_float(args, default = 1e3)
+            active.v += dv
 
     def do_decv(self,args):
-        """Decrease velocity of active speciess
+        """Decrease the velocity of the active species
 
         SN> decv [<deltav> = 1e3]
         """
         active = self.state.get_active_species()
-        dv = self._try_float(args, default = 1e3)
-        active.v -= dv
+        if active is not None:
+            dv = self._try_float(args, default = 1e3)
+            active.v -= dv
 
     def do_setv(self,args):
-        """Set velocity of active speciess
+        """Set the velocity of the active speciess
 
         SN> setv [<v> = 1e4]
         """
         active = self.state.get_active_species()
-        v = self._try_float(args, default = 1e4)
-        active.v = v
+        if active is not None:
+            v = self._try_float(args, default = 1e4)
+            active.v = v
 
     def do_more(self,args):
-        """Show more lines of active species
+        """Show more lines of the active species
 
         SN> more [<deltan> = 1]
         """
         active = self.state.get_active_species()
-        dn = self._try_int(args)
-        active.n += dn
+        if active is not None:
+            dn = self._try_int(args)
+            active.n += dn
 
     def do_less(self,args):
-        """Show more lines of active species
+        """Show fewer lines of the active species
 
         SN> less [<deltan> = 1]
         """
         active = self.state.get_active_species()
-        dn = self._try_int(args)
-        active.n -= dn
+        if active is not None:
+            dn = self._try_int(args)
+            active.n -= dn
 
     def do_setn(self,args):
         """Show (# = 1) lines"""
         active = self.state.get_active_species()
-        n = self._try_int(args)
-        active.n = n
+        if active is not None:
+            n = self._try_int(args, default = active.n)
+            active.n = n
 
     def do_setz(self,args):
-        """Set the cosmological redshift to be (# = 0)"""
+        """Set the cosmological redshift
+
+        SN> setz [<z> = 0]
+        """
         z = self._try_float(args,default = 0)
         self.state. z = z
 
     def do_lines(self,args):
-        """List displayed lines"""
+        """List displayed lines
+
+        SN> lines
+        """
         return self.state.describe_lines()
 
     def do_species(self,args):
-        """List displayed species"""
+        """List displayed species
+
+        SN> species
+        """
         return self.state.describe_species()
 
 
@@ -237,7 +272,12 @@ class SNConsole(cmd.Cmd):
         if args == "":
         # for no argument, list our commands
 
-            print("for more detailed help, use ? <command>")
+            print("for more detailed help, type ? <command>")
+            print("this will display usage information of the form")
+            print("  SN> command <required> [<optional> = default]")
+            print("")
+
+            print("=== List of Commands ===")
             print("")
 
             print("n, new      add species")
@@ -267,6 +307,8 @@ class SNConsole(cmd.Cmd):
 
             print("z, setz     set cosomological redshift")
             print("q, quit     exit SNLines")
+
+            print("!, shell    pass a command to the shell")
 
         else:
         # use built-in method to fetch the doc string
@@ -342,7 +384,10 @@ class SNLinesState:
         self._z = value
 
     def get_active_species(self):
-        return self.species[self.specids[-1]]
+        if len(self.specids) > 0:
+            return self.species[self.specids[-1]]
+        else:
+            return None
 
     def read_data(self, filename, append = False, rescale = True):
         """read in the data file"""
