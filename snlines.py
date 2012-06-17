@@ -260,6 +260,11 @@ class SNConsole(cmd.Cmd):
         """alias for exit"""
         return self.do_exit(args)
 
+    def do_EOF(self,args):
+        """alias for exit"""
+        return self.do_exit(args)
+
+
     ## Override cmd Commands ##
     def do_shell(self, args):
         """Pass command to a system shell when line begins with '!'"""
